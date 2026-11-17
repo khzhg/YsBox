@@ -37,9 +37,16 @@ public class ReadingGate {
 
     private static final String LOG_TAG = "reading-gate";
 
-    /** 图片 URL：扩展名必须在 path 部分（query 里的 ?x=a.jpg 不算，防 m3u8 误判）。 */
+    /**
+     * 图片 URL。
+     *
+     * <p>扩展名必须在 path 部分（query 里的 ?x=a.jpg 不算，防 m3u8 误判）。
+     * 末尾允许 py 生态的请求头后缀（{@code @Referer=...}、{@code @Headers=...}、
+     * {@code @User-Agent=...}）——推图网这类图源会给每张图带上 Referer 防盗链标记，
+     * 若不容忍这段后缀，整章图会被判成"不是图片"而漏认。</p>
+     */
     private static final Pattern IMAGE_URL = Pattern.compile(
-            "^https?://[^\\s?#]+\\.(jpg|jpeg|png|webp|gif|bmp)([?#].*)?$",
+            "^https?://[^\\s?#]+\\.(jpg|jpeg|png|webp|gif|bmp)([?#].*)?(@(Referer|Headers|User-Agent)=.*)?$",
             Pattern.CASE_INSENSITIVE);
 
     /** 漫画：最少段数（2 段太容易撞，提到 3）。 */
@@ -197,6 +204,68 @@ public class ReadingGate {
         return null;
     }
 
+    // ---------------- 协议前缀（影视+ 同款语义） ----------------
+
+    /**
+     * 按播放地址的协议前缀判别。对齐影视+ 的约定式方案：
+     * 数据源主动声明非视频内容，客户端不猜。
+     * <p>
+     * 这是一个 startsWith，不会误判：视频地址永远不会以这些前缀开头，
+     * 因此与「宁可漏认、绝不错认」的红线不冲突。
+     *
+     * @param rawUrl     playerContent 返回的原始地址
+     * @param siteKey    py 源 key（标识书架与续读）
+     * @param sourceName 源名（书源名 / 规则名）
+     * @param bookTitle  书名（详情页标题）
+     * @param chapters   章节列表，由调用方从 Flag.episodes 转出
+     * @param index      当前章下标
+     */
+    public static ReadingSession fromScheme(String rawUrl, String siteKey, String sourceName,
+                                           String bookTitle, List<ReadingSession.Chapter> chapters,
+                                           int index) {
+        if (TextUtils.isEmpty(rawUrl)) return null;
+        String url = rawUrl.trim();
+
+        if (url.startsWith("novel://")) {
+            ReadingSession s = new ReadingSession();
+            s.kind = ReadingSession.Kind.NOVEL;
+            s.sourceName = sourceName == null ? "" : sourceName;
+            s.siteKey = siteKey == null ? "" : siteKey;
+            s.bookTitle = bookTitle == null ? "" : bookTitle;
+            if (chapters != null) s.chapters = chapters;
+            s.chapterIndex = clampIndex(index, s.chapters);
+            ReadingSession.Chapter c = s.currentChapter();
+            s.chapterUrl = c == null ? "" : c.url;
+            logDivert("divert kind=NOVEL scheme=novel site=%s chapters=%d",
+                    s.siteKey, s.chapters.size());
+            return s;
+        }
+
+        if (url.startsWith("pics://") || url.startsWith("manga://")) {
+            ReadingSession s = new ReadingSession();
+            s.kind = ReadingSession.Kind.COMIC;
+            s.sourceName = sourceName == null ? "" : sourceName;
+            s.siteKey = siteKey == null ? "" : siteKey;
+            s.bookTitle = bookTitle == null ? "" : bookTitle;
+            if (chapters != null) s.chapters = chapters;
+            s.chapterIndex = clampIndex(index, s.chapters);
+            ReadingSession.Chapter c = s.currentChapter();
+            s.chapterUrl = c == null ? "" : c.url;
+            // pics:// 串本身可能就是图片列表，能拆就拆
+            s.images = splitImages(url);
+            logDivert("divert kind=COMIC scheme=%s site=%s imgs=%d",
+                    url.startsWith("manga://") ? "manga" : "pics", s.siteKey, s.images.size());
+            return s;
+        }
+
+        return null;
+    }
+
+    private static int clampIndex(int index, List<ReadingSession.Chapter> chapters) {
+        if (chapters == null || chapters.isEmpty()) return 0;
+        return Math.max(0, Math.min(index, chapters.size() - 1));
+    }
+
     private static boolean allImageUrl(List<String> segs) {
         for (String u : segs) {
             if (!isImageUrl(u)) return false;
@@ -275,17 +344,25 @@ public class ReadingGate {
     }
 
     /**
-     * 图片串拆分：先按行、再按字面 #、再按逗号。
-     * <b>绝不按单个 & 拆</b>（HkRouter 的教训：图片地址 query 里的 & 会被切碎）。
+     * 把一段图片串拆成 URL 列表。
+     *
+     * <p>兼容 py 生态常见的几种分隔：换行、{@code #}、逗号，以及
+     * {@code &&}——推图网这类源用 {@code "&&".join(...)} 拼多图，
+     * 少了这一项整串会被当成一个超长 URL，导致一张图都取不到。</p>
      */
     public static List<String> splitImages(String raw) {
         List<String> out = new ArrayList<>();
         if (TextUtils.isEmpty(raw)) return out;
-        for (String line : raw.split("\n")) {
-            for (String seg : line.split("#")) {
-                for (String part : seg.split(",")) {
-                    String t = part.trim();
-                    if (!t.isEmpty()) out.add(t);
+        String s = raw.trim();
+        // pics:// 前缀只是标记，去掉后再拆
+        if (s.startsWith("pics://")) s = s.substring("pics://".length());
+        for (String line : s.split("[\\n\\r]")) {
+            for (String part : line.split("&&")) {
+                for (String seg : part.split("#")) {
+                    for (String item : seg.split(",")) {
+                        String t = item.trim();
+                        if (!t.isEmpty()) out.add(t);
+                    }
                 }
             }
         }

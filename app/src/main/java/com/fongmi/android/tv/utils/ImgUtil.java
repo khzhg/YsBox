@@ -96,17 +96,32 @@ public class ImgUtil {
         }
     }
 
-    /** 小程序兼容重载：带 referer 参数（当前实现忽略 referer，与 xingchen 视觉一致）。 */
+    /**
+     * 小程序兼容重载：带 referer 参数。
+     *
+     * <p>原来这里把 referer 直接丢了（注释写着"与 xingchen 视觉一致"），
+     * 但带防盗链的图源（如推图网 i.tuiimg.net）必须带 Referer 才能取到图，
+     * 丢掉就整列表全是占位图。现在改成：URL 自身带 @Referer= 时以它为准，
+     * 否则把传入的 referer 作为兜底补上。</p>
+     */
     public static void load(String text, String url, ImageView view, String referer) {
-        load(text, url, view, true);
+        load(text, url, view, true, 0, 0, referer);
     }
 
     public static void load(String text, String url, ImageView view, boolean vod, int width, int height, String referer) {
-        load(text, url, view, vod, width, height);
+        String u = url;
+        if (!TextUtils.isEmpty(u) && !TextUtils.isEmpty(referer) && !u.contains("@Referer=")) {
+            u = u + "@Referer=" + referer;
+        }
+        load(text, u, view, vod, width, height);
     }
 
     public static void loadCircle(String text, String url, ImageView view, String referer) {
-        loadCircle(text, url, view);
+        String u = url;
+        if (!TextUtils.isEmpty(u) && !TextUtils.isEmpty(referer) && !u.contains("@Referer=")) {
+            u = u + "@Referer=" + referer;
+        }
+        loadCircle(text, u, view);
     }
 
     public static void loadCircle(String text, String url, ImageView view) {

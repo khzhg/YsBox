@@ -372,6 +372,22 @@ public class SiteApi {
         return Result.empty();
     }
 
+    /**
+     * 执行 action 并返回数据源的原始字符串。
+     *
+     * <p>为什么需要它：脚本常常把下一步的界面描述放在返回值里，形如
+     * {@code {"action":{"actionId":"...","type":"input",...}}}。
+     * 这种串没有 url / msg 字段，过一遍 {@link Result#fromJson} 就全丢了，
+     * 客户端再也看不到下一步该弹什么。所以 action 这条链要保留原文。</p>
+     */
+    public static String actionRaw(@NonNull String key, @NonNull String action) throws Exception {
+        Site site = VodConfig.get().getSite(key);
+        SpiderDebug.log("action", "key=%s,action=%s", key, action);
+        if (site.getType() == 3) return site.recent().spider().action(action);
+        if (site.getType() == 4) return OkHttp.string(action);
+        return "";
+    }
+
     @NonNull
     public static Result fetchPic(@NonNull Site site, @NonNull Result result) throws Exception {
         if (site.getType() > 2 || result.getList().isEmpty() || !result.getVod().getPic().isEmpty()) return result;

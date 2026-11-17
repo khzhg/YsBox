@@ -29,7 +29,19 @@ public class RequestInterceptor implements Interceptor {
         Request.Builder builder = request.newBuilder();
         HttpUrl url = request.url();
         checkAuth(url, builder);
-        return chain.proceed(builder.build());
+        long start = System.currentTimeMillis();
+        try {
+            Response response = chain.proceed(builder.build());
+            long cost = System.currentTimeMillis() - start;
+            com.github.catvod.crawler.DebugBus.relayApi("HTTP", url.host() + url.encodedPath()
+                    + "  " + response.code() + "  " + cost + "ms");
+            return response;
+        } catch (IOException e) {
+            long cost = System.currentTimeMillis() - start;
+            com.github.catvod.crawler.DebugBus.relayApi("HTTP", url.host() + url.encodedPath()
+                    + "  FAIL  " + cost + "ms  " + e.getClass().getSimpleName());
+            throw e;
+        }
     }
 
     private void checkAuth(HttpUrl url, Request.Builder builder) {

@@ -84,8 +84,19 @@ public class Notify {
     }
 
     private void makeText(String text) {
-        if (mToast != null) mToast.cancel();
-        mToast = Toast.makeText(App.get(), text, Toast.LENGTH_LONG);
-        mToast.show();
+        // 两条硬约束，缺一条 Toast 就会被系统静默吞掉（用户反馈"没有返回 toast"）：
+        // 1. 必须在主线程 show()——很多调用点来自 Task.execute 的工作线程；
+        // 2. 必须用带 Looper 的线程 + 应用已在前台，否则 Android 11+ 直接丢弃。
+        Runnable r = () -> {
+            try {
+                if (mToast != null) mToast.cancel();
+                mToast = Toast.makeText(App.get(), text, Toast.LENGTH_LONG);
+                mToast.show();
+            } catch (Throwable ignored) {
+                // Toast 失败不能反噬调用方
+            }
+        };
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) r.run();
+        else new android.os.Handler(android.os.Looper.getMainLooper()).post(r);
     }
 }

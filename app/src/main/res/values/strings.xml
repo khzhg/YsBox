@@ -536,6 +536,8 @@
     <string name="setting_pan_drive_login">Cloud drive sign-in</string>
     <string name="setting_server_login">Server sign-in</string>
     <string name="setting_mini_app">Haikuo Mini Program</string>
+    <string name="setting_debug_float">Debug overlay</string>
+    <string name="setting_debug_float_desc">Show real-time script log window</string>
     <string name="plugin_search_hint">Search script name</string>
     <string name="setting_mini_app_on">Enabled</string>
     <string name="setting_mini_app_off">Disabled</string>

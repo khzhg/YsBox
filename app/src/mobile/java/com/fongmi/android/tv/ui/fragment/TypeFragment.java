@@ -196,7 +196,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     @Override
     public void onItemClick(Vod item) {
-        if (item.isAction()) {
+        if (item.isActionTag()) {
+            // vod_tag=action：条目 id 是一段 UI 描述 JSON，交给 ActionRunner 渲染并回传
+            new com.fongmi.android.tv.ui.action.ActionRunner(requireActivity(), getKey())
+                    .onRefresh(this::onRefresh)
+                    .onSearch(kw -> SearchActivity.start(requireActivity(), kw))
+                    .handle(item);
+        } else if (item.isAction()) {
+            // 兼容旧形态：条目 action 字段直接当动作名回传
             mViewModel.action(getKey(), item.getAction());
         } else if (item.isFolder()) {
             getParent().openFolder(item.getId(), mExtends);
@@ -210,7 +217,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
 
     @Override
     public boolean onLongClick(Vod item) {
-        if (item.isAction() || item.isFolder()) return false;
+        if (item.isAction() || item.isActionTag() || item.isFolder()) return false;
         SearchActivity.start(requireActivity(), item.getName());
         return true;
     }

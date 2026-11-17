@@ -3,7 +3,7 @@
 import sys
 import threading
 
-_TAG = "python-spider"
+_TAG = "py"
 _MAX_LINE = 12_000
 _install_lock = threading.Lock()
 _installed = False
@@ -69,9 +69,12 @@ class _LogStream:
             return
         state.busy = True
         try:
-            if not self._store.acceptsTag(_TAG):
-                self._reset()
-                return
+            # YsBox 修改：不再 gate 在 DebugLogStore.acceptsTag 上。
+            # 诊断存储默认 enabled=False 且全项目无人调用 restoreEnabled /
+            # setEnabled——acceptsTag 恒为 False，原版在这里直接 return，
+            # 下面的 SpiderDebug.console 永远不会被调，py 源的 print
+            # 一条都进不了调试面板（用户反馈「py 没有输出」的根因之一）。
+            # 改为直连 console，由调试面板自己的采集开关决定收不收。
             epoch = (self._store.captureGeneration(), self._store.categories())
             if getattr(state, "epoch", None) != epoch:
                 self._reset(epoch)

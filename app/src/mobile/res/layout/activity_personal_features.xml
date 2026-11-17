@@ -139,6 +139,31 @@
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/debugFloat"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/shape_item"
+                android:gravity="center_vertical"
+                android:tag="chip_row"
+                android:orientation="horizontal">
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/setting_debug_float"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/debugFloatText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    tools:text="Off" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+            <androidx.appcompat.widget.LinearLayoutCompat
                 android:id="@+id/miniApp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

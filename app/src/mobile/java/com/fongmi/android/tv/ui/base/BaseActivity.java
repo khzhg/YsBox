@@ -160,6 +160,12 @@ public abstract class BaseActivity extends AppCompatActivity {
             com.fongmi.android.tv.ai.AiFloatManager.get().onResume(this);
         } catch (Exception ignored) {
         }
+        // 调试悬浮窗：TYPE_APPLICATION_PANEL 依附 Activity，每个页面回前台都需重新挂载。
+        // 开关关闭时 attach() 直接返回，不产生任何开销。
+        try {
+            com.fongmi.android.tv.debug.DebugCenter.attach(this);
+        } catch (Exception ignored) {
+        }
     }
 
     @Override

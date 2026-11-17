@@ -108,6 +108,20 @@ public class VodPlaybackController {
         applyPlaybackResult(playback.result(), playback.request());
     }
 
+    /**
+     * 主动放弃当前挂起的播放请求（改道去阅读器时用）。
+     *
+     * <p>分流走阅读器后，这次请求永远不会再回到 onPlaybackResult，
+     * 控制器里却还留着 pending；不清掉的话详情页会一直停在“加载中”，
+     * 而且后续同集点击可能被判成同一个请求而不再响应。</p>
+     */
+    public void cancelPendingPlayback() {
+        try {
+            state.clearPlayRequest();
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void applyPlaybackResult(Result result, VodPlayRequest request) {
         Episode episode = findEpisode(request);
         if (episode == null) return;

@@ -531,6 +531,8 @@
     <string name="setting_pan_drive_login">网盘登录</string>
     <string name="setting_server_login">服务器登录</string>
     <string name="setting_mini_app">海阔小程序</string>
+    <string name="setting_debug_float">调试悬浮窗</string>
+    <string name="setting_debug_float_desc">实时查看脚本运行日志</string>
     <string name="plugin_search_hint">搜索脚本名</string>
     <string name="setting_mini_app_on">已开启</string>
     <string name="setting_mini_app_off">已关闭</string>

@@ -68,6 +68,9 @@ public class ReadingSession {
     public String detailId = "";
     /** py 小说：建会话时的线路 flag 名（多线路时重建选同一线路的章节表）。 */
     public String playFlag = "";
+
+    /** novel:// 载荷里的 title：数据源给的章名，优于目录里的章名。 */
+    public String chapterTitleOverride = "";
     /** Legado 书源 bookSourceUrl（书源懒取正文/图片用）。 */
     public String legadoKey = "";
     /** 本地书 id（localbook 包；非空=本地书，懒取走 LocalBookReader）。 */

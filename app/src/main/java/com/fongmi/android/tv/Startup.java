@@ -28,6 +28,12 @@ public class Startup implements Initializer<Void> {
     public Void create(@NonNull Context context) {
         CaocConfig.Builder.create().trackActivities(true).backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();
         Logger.addLogAdapter(new AndroidLogAdapter(PrettyFormatStrategy.newBuilder().methodCount(0).showThreadInfo(false).tag("TV").build()));
+        // 调试总线：把 Logger 的日志镜像一份到 DebugLogBus，供悬浮窗 / 对话框展示。
+        // 关闭时不记录，对运行时零开销。
+        Logger.addLogAdapter(new com.fongmi.android.tv.debug.DebugLogAdapter());
+        // 拦截 System.out / err：内嵌 Python（Chaquopy）的 print 走这条路，
+        // 既不经过 Log 也不经过 Logger，必须单独收口。
+        com.fongmi.android.tv.debug.SystemLogMirror.install();
         EventBus.builder().addIndex(new EventIndex()).installDefaultEventBus();
         OkHttp.dns().setDoh(() -> Doh.objectFrom(Setting.getDoh()));
         return null;

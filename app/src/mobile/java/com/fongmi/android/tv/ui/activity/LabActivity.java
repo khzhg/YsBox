@@ -17,6 +17,7 @@ import com.fongmi.android.tv.databinding.ActivityLabBinding;
 import com.fongmi.android.tv.setting.DecodeSetting;
 import com.fongmi.android.tv.setting.DownloadSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -69,6 +70,15 @@ public class LabActivity extends BaseActivity {
         });
         mBinding.python.setOnClickListener(view -> PythonPackagesActivity.start(this));
         mBinding.service.setOnClickListener(view -> showService());
+        // 调试悬浮窗开关：长按版本号区域 7 次解锁后可见，避免普通用户误触
+        mBinding.info.setOnLongClickListener(view -> {
+            boolean unlocked = com.fongmi.android.tv.debug.DebugCenter.tap();
+            if (unlocked) {
+                Notify.show("调试已解锁，悬浮窗已开启");
+                com.fongmi.android.tv.debug.DebugCenter.attach(this);
+            }
+            return true;
+        });
     }
 
     private void showService() {

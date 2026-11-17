@@ -285,6 +285,16 @@ public class Vod implements Parcelable, Diffable<Vod> {
         return !getAction().isEmpty();
     }
 
+    /**
+     * 是否 action 条目（vod_tag=action）。
+     *
+     * <p>与 {@link #isAction()} 的区别：那条看的是 action 字段（数据源主页 more.actions 用），
+     * 这条看的是列表条目的 vod_tag。列表里的 action 条目把 UI 描述放在 vod_id 里。</p>
+     */
+    public boolean isActionTag() {
+        return "action".equalsIgnoreCase(getTag());
+    }
+
     public void checkPic(String pic) {
         if (getPic().isEmpty()) setPic(pic);
     }

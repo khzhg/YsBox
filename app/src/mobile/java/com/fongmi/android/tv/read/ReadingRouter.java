@@ -2,22 +2,31 @@ package com.fongmi.android.tv.read;
 
 import android.content.Context;
 
-import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.ui.reader.ComicReaderActivity;
+import com.fongmi.android.tv.ui.reader.NovelReaderActivity;
 
 /**
- * 阅读器路由适配层。
- * <p>
- * trae 分支未移植独立阅读器（小说/漫画/听书/TTS）组件，这里保留
- * {@code ReadingRouter} 的最小接口，海阔小程序仍可正常完成详情解析与会话准备，
- * 仅在真正进入阅读器时提示该能力未集成，不影响小程序主体（规则/WebView/搜索/收藏/历史/播放）。
+ * 阅读器路由：按会话类型分发到漫画/小说阅读器。
+ *
+ * 原实现是占位（trae 分支未移植阅读器），这里补上真实路由。
+ * 会话可能带懒取字段（chapterUrl/ruleTitle 等）尚未填充正文/图片，
+ * 阅读器内部按需处理：有内容直接渲染，为空则提示。
  */
 public class ReadingRouter {
 
     public static void openReading(Context context, ReadingSession session) {
-        Notify.show("当前版本未集成阅读器");
+        openReadingWithStartPage(context, session, 0);
     }
 
     public static void openReadingWithStartPage(Context context, ReadingSession session, int startPage) {
-        Notify.show("当前版本未集成阅读器");
+        if (context == null || session == null) return;
+        android.app.Activity activity = context instanceof android.app.Activity
+                ? (android.app.Activity) context : null;
+        if (activity == null) return;
+        if (session.kind == ReadingSession.Kind.NOVEL) {
+            NovelReaderActivity.start(activity, session, session.startFraction);
+        } else {
+            ComicReaderActivity.start(activity, session, startPage);
+        }
     }
 }

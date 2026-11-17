@@ -142,6 +142,27 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private ActivityVideoBinding mBinding;
     private VideoViewModel mViewModel;
     private VodPlaybackController mVod;
+    /** 当前详情 Vod：漫画/小说分流时需要从中取书名与章节列表。 */
+    private com.fongmi.android.tv.bean.Vod mCurrentVod;
+    /**
+     * 已经改道去阅读器的地址。
+     * <p>
+     * 归因：playback LiveData 是粘性的，observeForever 会在每次
+     * 回到详情页（Activity 重建 / service 重就绪）时重放最后一次结果，
+     * 若不记录就会反复分流、反复跳阅读器。
+     * 这里按完整地址去重：同一集只分流一次；切集 / 切线路时地址变了，自然重新生效。
+     */
+    private static final java.util.Set<String> mDivertedUrls = new java.util.HashSet<>();
+    /**
+     * 已经处理过的播放请求（key|flag|id）。
+     * <p>
+     * 归因：observeForever 在 Activity 重建、service 重就绪、从播放器/
+     * 阅读器返回时都会重放最后一次结果；若不记录，
+     * 就会反复起播 / 反复跳阅读器，形成循环进入。
+     * 放 static 是为了存活 Activity 重建（旋转屏、回收后回来）。
+     */
+    private static final java.util.Set<String> sConsumedPlayback =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private FlagAdapter mFlagAdapter;
     private EpisodeAdapter mEpisodeAdapter;
     private QualityAdapter mQualityAdapter;
@@ -619,11 +640,181 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void onDetailObserved(VodDetailResult result) {
+        try {
+            if (result != null && result.result() != null && result.result().getVod() != null) {
+                mCurrentVod = result.result().getVod();
+            }
+        } catch (Throwable ignored) {
+        }
         mVod.onDetailResult(result);
     }
 
     private void onPlaybackObserved(PlaybackResult<VodPlayRequest> result) {
+        // 同一个播放请求只处理一次：防 LiveData 粘性重放
+        // 导致“退出播放器/阅读器 → 回详情页 → 又自动进入”的循环。
+        String key = playbackKeyOf(result);
+        if (key != null && sConsumedPlayback.contains(key)) return;
+        if (key != null) sConsumedPlayback.add(key);
+
+        if (routeToReaderIfNeeded(result)) return;
         mVod.onPlaybackResult(result);
+    }
+
+    /**
+     * 播放请求标识：key|flag|id。
+     */
+    private String playbackKeyOf(PlaybackResult<VodPlayRequest> result) {
+        try {
+            if (result == null || result.request() == null) return null;
+            VodPlayRequest q = result.request();
+            return q.getKey() + "|" + q.getFlag() + "|" + q.getId();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** 用户手动点集：清掉记录，允许重新进入阅读器 / 重新起播。 */
+    private void resetPlaybackGuards() {
+        sConsumedPlayback.clear();
+        mDivertedUrls.clear();
+    }
+
+    /**
+     * 漫画/小说分流：判别层识别出非视频内容就改道去阅读器，
+     * 不进播放器。判别结果为空时一律走原流程，宁可漏认不可错认。
+     */
+    private boolean routeToReaderIfNeeded(PlaybackResult<VodPlayRequest> result) {
+        try {
+            if (result == null || result.result() == null) return false;
+            com.fongmi.android.tv.bean.Result r = result.result();
+
+            // 已经因这个地址跳过一次：直接当作已消费，不再重复进入。
+            // （覆盖 LiveData 粘性重放 / Activity 重建 / 从阅读器返回的场景）
+            String divertKey = divertKeyOf(r);
+            if (divertKey != null && mDivertedUrls.contains(divertKey)) return true;
+
+            // ① 先看协议前缀（影视+ 同款）：novel:// / pics:// / manga://
+            com.fongmi.android.tv.read.ReadingSession byScheme = buildSessionFromScheme(r);
+            if (byScheme != null) {
+                if (divertKey != null) mDivertedUrls.add(divertKey);
+                // 改道后必须收掉本页的加载态并结束本次播放请求，
+                // 否则详情页会一直停在转圈（本次修改前就是这样卡住的）。
+                closeLoadingAfterDivert();
+                com.fongmi.android.tv.read.ReadingRouter
+                        .openReadingWithStartPage(this, byScheme, byScheme.startPage);
+                return true;
+            }
+
+            // ② 再看判别层已经写入的会话（海阙小程序链）
+            com.fongmi.android.tv.read.ReadingSession session =
+                    com.fongmi.android.tv.read.ReadingGate.extract(r);
+            if (session == null) return false;
+            if (divertKey != null) mDivertedUrls.add(divertKey);
+            closeLoadingAfterDivert();
+            com.fongmi.android.tv.read.ReadingRouter.openReadingWithStartPage(this, session, session.startPage);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * 取去重用的地址标识：当前播放地址 + 线路名。
+     */
+    private String divertKeyOf(com.fongmi.android.tv.bean.Result r) {
+        try {
+            String u = r.getUrl() == null ? null : r.getUrl().v();
+            if (TextUtils.isEmpty(u)) return null;
+            String f = r.getFlag();
+            return u.trim() + "|" + (f == null ? "" : f);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private com.fongmi.android.tv.read.ReadingSession buildSessionFromScheme(com.fongmi.android.tv.bean.Result r) {
+        String url = null;
+        try {
+            url = r.getUrl() == null ? null : r.getUrl().v();
+        } catch (Throwable ignored) {
+        }
+        if (url == null) return null;
+        String u = url.trim();
+        if (!u.startsWith("novel://") && !u.startsWith("pics://") && !u.startsWith("manga://")) return null;
+
+        java.util.List<com.fongmi.android.tv.read.ReadingSession.Chapter> chapters =
+                new java.util.ArrayList<>();
+        String bookTitle = "";
+        int index = 0;
+
+        com.fongmi.android.tv.bean.Vod vod = mCurrentVod;
+        if (vod != null) {
+            bookTitle = vod.getName() == null ? "" : vod.getName();
+            // 找当前集所在的那条线路（旁路不干扰）
+            com.fongmi.android.tv.bean.Flag active = findActiveFlag(vod, r.getFlag());
+            if (active != null && active.getEpisodes() != null) {
+                java.util.List<com.fongmi.android.tv.bean.Episode> eps = active.getEpisodes();
+                for (int i = 0; i < eps.size(); i++) {
+                    com.fongmi.android.tv.bean.Episode ep = eps.get(i);
+                    chapters.add(new com.fongmi.android.tv.read.ReadingSession.Chapter(
+                            ep.getName(), ep.getUrl()));
+                }
+                index = indexOfEpisode(eps, u);
+            }
+        }
+        com.fongmi.android.tv.read.ReadingSession session =
+                com.fongmi.android.tv.read.ReadingGate.fromScheme(
+                        u, getKey(), getSite() == null ? "" : getSite().getName(),
+                        bookTitle, chapters, index);
+        if (session != null) {
+            // 懒取正文需要线路名（playerContent 的 flag 参数）
+            String f = r.getFlag();
+            session.playFlag = f == null ? "" : f;
+        }
+        return session;
+    }
+
+    private com.fongmi.android.tv.bean.Flag findActiveFlag(com.fongmi.android.tv.bean.Vod vod, String flagName) {
+        try {
+            java.util.List<com.fongmi.android.tv.bean.Flag> flags = vod.getFlags();
+            if (flags == null || flags.isEmpty()) return null;
+            if (flagName != null && !flagName.isEmpty()) {
+                for (com.fongmi.android.tv.bean.Flag f : flags) {
+                    if (flagName.equals(f.getFlag())) return f;
+                }
+            }
+            return flags.get(0);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private int indexOfEpisode(java.util.List<com.fongmi.android.tv.bean.Episode> eps, String url) {
+        if (eps == null || url == null) return 0;
+        for (int i = 0; i < eps.size(); i++) {
+            if (url.equals(eps.get(i).getUrl())) return i;
+        }
+        return 0;
+    }
+
+    /**
+     * 改道去阅读器后收尾，避免详情页卡在加载态。
+     *
+     * <p>这次播放请求已经被阅读器“消费”掉了，不会再回来走
+     * {@code mVod.onPlaybackResult()}，所以控制器里的 pending 请求要主动清掉，
+     * 本页的转圈提示也要收起来——不然回详情页时进度圈一直转，
+     * 这就是“小说详情页卡住”的成因。</p>
+     */
+    private void closeLoadingAfterDivert() {
+        try {
+            mVod.cancelPendingPlayback();
+        } catch (Throwable ignored) {
+        }
+        try {
+            mBinding.progressLayout.showContent();
+            mBinding.swipeLayout.setEnabled(true);
+        } catch (Throwable ignored) {
+        }
     }
 
     private void onPreloadObserved(PlaybackResult<VodPlayRequest> result) {
@@ -1381,6 +1572,15 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void deliverDirectResult(VodPlayRequest request, Result result) {
         if (isFinishing() || isDestroyed() || service() == null) return;
+        try {
+            com.fongmi.android.tv.read.ReadingSession session =
+                    com.fongmi.android.tv.read.ReadingGate.extract(result);
+            if (session != null) {
+                com.fongmi.android.tv.read.ReadingRouter.openReadingWithStartPage(this, session, session.startPage);
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
         mVod.onPlaybackResult(new PlaybackResult<>(request, result));
     }
 
@@ -1449,17 +1649,20 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     @Override
     public void onItemClick(Flag item) {
+        resetPlaybackGuards();
         mVod.selectFlag(item);
     }
 
     @Override
     public void onItemClick(Episode item) {
         if (shouldEnterFullscreen(item)) return;
+        resetPlaybackGuards();
         mVod.selectEpisode(item);
     }
 
     @Override
     public void onItemClick(Result result) {
+        resetPlaybackGuards();
         mVod.selectQuality(result);
     }
 

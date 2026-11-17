@@ -51,6 +51,7 @@ public class PersonalFeaturesActivity extends BaseActivity {
         mBinding.adblock.setOnClickListener(this::setAdblock);
         mBinding.aggregatedSearch.setOnClickListener(this::setAggregatedSearch);
         mBinding.miniApp.setOnClickListener(view -> toggleMiniApp());
+        mBinding.debugFloat.setOnClickListener(this::setDebugFloat);
     }
 
     @Override
@@ -65,6 +66,7 @@ public class PersonalFeaturesActivity extends BaseActivity {
         mBinding.adblockText.setText(Setting.getSwitch(Setting.isAdblock()));
         mBinding.aggregatedSearchText.setText(Setting.getSwitch(Setting.isAggregatedSearch()));
         mBinding.miniAppText.setText(MiniAppActivity.isEnabled(this) ? R.string.state_on : R.string.state_off);
+        mBinding.debugFloatText.setText(com.fongmi.android.tv.debug.DebugCenter.isEnabled() ? R.string.state_on : R.string.state_off);
     }
 
     private void setIncognito(View view) {
@@ -86,6 +88,18 @@ public class PersonalFeaturesActivity extends BaseActivity {
     private void setAggregatedSearch(View view) {
         Setting.putAggregatedSearch(!Setting.isAggregatedSearch());
         RefreshEvent.home();
+        refresh();
+    }
+
+    /** 调试悬浮窗开关：开启后立即在当前页面挂载，关闭时卸载并清空缓存。 */
+    private void setDebugFloat(View view) {
+        boolean enabled = !com.fongmi.android.tv.debug.DebugCenter.isEnabled();
+        com.fongmi.android.tv.debug.DebugCenter.setEnabled(enabled);
+        if (enabled) {
+            com.fongmi.android.tv.debug.DebugCenter.attach(this);
+        } else {
+            com.fongmi.android.tv.debug.DebugCenter.detach();
+        }
         refresh();
     }
 
